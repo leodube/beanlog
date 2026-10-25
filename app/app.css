@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  /* System font stack: San Francisco on iPhone/Mac, no web-font download. */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+/* Safe-area padding for the notch, Dynamic Island and home indicator.
+   Fall back to normal gutters on devices without insets. */
+@utility px-safe {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+    /* Stop iOS from inflating text when rotating to landscape. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-stone-50 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100;
+    /* No grey flash when tapping links and buttons on iOS. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS Safari zooms into any focused field under 16px. Keep form controls
+     at 16px+ so logging a brew doesn't jump the page around. */
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
