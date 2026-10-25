@@ -34,6 +34,10 @@ import {
   updateBag,
 } from "~/lib/coffee.server";
 import { countryName } from "~/lib/countries";
+import { whenLabel } from "~/lib/brew";
+import { listBrews } from "~/lib/brews.server";
+import { RatingPill } from "~/components/bean";
+import { formatGrind } from "~/lib/equipment";
 import { fieldErrors, formToObject } from "~/lib/form";
 import type { Route } from "./+types/coffee.$coffeeId";
 
@@ -50,8 +54,23 @@ const idOf = (params: { coffeeId: string }) => {
 };
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const coffee = await getCoffee(idOf(params));
+  const id = idOf(params);
+  const [coffee, brewRows] = await Promise.all([
+    getCoffee(id),
+    listBrews({ coffeeId: id }),
+  ]);
   if (!coffee) throw data("Coffee not found", { status: 404 });
+  const now = new Date();
+  const brews = brewRows.map((b) => ({
+    ...b,
+    when: whenLabel(b.brewedAt, now),
+  }));
+  // Highest rated; newest wins a tie (the list is newest first).
+  const best = brews.reduce<(typeof brews)[number] | null>(
+    (top, b) =>
+      b.rating != null && (top == null || b.rating > top.rating!) ? b : top,
+    null,
+  );
   const today = localToday();
   return {
     coffee: {
@@ -62,6 +81,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       })),
     },
     today,
+    recentBrews: brews.slice(0, 3),
+    best,
     bagSheet: new URL(request.url).searchParams.get("bag"), // "new" or a bag id
   };
 }
@@ -127,7 +148,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 export default function CoffeeDetail({ loaderData }: Route.ComponentProps) {
-  const { coffee, bagSheet, today } = loaderData;
+  const { coffee, bagSheet, today, recentBrews, best } = loaderData;
   const sheetBag =
     bagSheet && bagSheet !== "new"
       ? coffee.bags.find((b) => String(b.id) === bagSheet)
@@ -298,12 +319,89 @@ export default function CoffeeDetail({ loaderData }: Route.ComponentProps) {
           </div>
         </Section>
 
-        <Section title="Brews">
-          <p className="p-3 text-sm text-muted">
-            {coffee.brews
-              ? plural(coffee.brews, "brew")
-              : "No brews logged yet."}
-          </p>
+        {best && (
+          <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-medium text-muted">
+              Your best brew of this
+            </span>
+            <Link
+              to={`/brews/${best.id}`}
+              className="flex flex-col gap-1 rounded-2xl border border-line bg-surface p-3"
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span className="font-semibold">
+                  {best.recipe ?? best.brewer}
+                </span>
+                <RatingPill value={best.rating!} />
+              </span>
+              <span className="text-sm text-muted tabular-nums">
+                {best.brewer} · {best.doseG} g → {best.waterMl} ml ·{" "}
+                {best.tempC}°C ·{" "}
+                {formatGrind(
+                  {
+                    settingKind: best.grinderKind,
+                    step: best.grinderStep,
+                    unit: best.grinderUnit,
+                  },
+                  best.grindSetting,
+                )}
+              </span>
+            </Link>
+          </div>
+        )}
+
+        <Section title="Recent brews">
+          {recentBrews.length ? (
+            <div className="flex flex-col divide-y divide-line">
+              {recentBrews.map((b) => (
+                <Link
+                  key={b.id}
+                  to={`/brews/${b.id}`}
+                  className="flex items-center justify-between gap-3 px-3 py-2.5"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">
+                      {b.recipe ?? "No recipe"}
+                    </span>
+                    <span className="block text-xs text-muted tabular-nums">
+                      {b.when} · {b.doseG} g ·{" "}
+                      {formatGrind(
+                        {
+                          settingKind: b.grinderKind,
+                          step: b.grinderStep,
+                          unit: b.grinderUnit,
+                        },
+                        b.grindSetting,
+                      )}
+                    </span>
+                  </span>
+                  {b.rating != null ? (
+                    <RatingPill value={b.rating} />
+                  ) : (
+                    <span className="text-xs text-muted">Not rated</span>
+                  )}
+                </Link>
+              ))}
+              <Link
+                to={`/brews?coffee=${coffee.id}`}
+                className="flex items-center justify-between px-3 py-2.5 text-sm font-medium text-accent tabular-nums"
+              >
+                See all {plural(coffee.brews, "brew")}
+                <svg
+                  className="size-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path d="m9 5 7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+          ) : (
+            <p className="p-3 text-sm text-muted">No brews logged yet.</p>
+          )}
         </Section>
 
         <div className="flex flex-col gap-2 pb-2">

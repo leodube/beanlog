@@ -1,4 +1,6 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or, sql, type SQL } from "drizzle-orm";
+
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 import { db } from "~/db/client.server";
 import {
@@ -10,22 +12,68 @@ import {
   recipes,
   roasters,
 } from "~/db/schema.server";
-import type { BrewValues } from "./brew";
-import { listOpenBags } from "./coffee.server";
-import { activeRecipes } from "./recipes.server";
+import { bagUnavailable, type BrewValues } from "./brew";
+import { localToday } from "./coffee";
 
 // ---------- Brew form data ----------
 
-/** Everything the brew form needs, including recent history for its grind hints. */
-export async function brewFormData() {
-  const [bagOptions, recipeOptions, brewerOptions, grinderOptions, history] =
+type Keep = {
+  recipeId?: number | null;
+  brewerId?: number;
+  grinderId?: number;
+};
+
+/**
+ * Everything the brew form needs, including recent history for its grind
+ * hints. When editing, `keep` names the brew's own recipe and equipment so
+ * they stay selectable even if archived since.
+ *
+ * Bags are all of them, finished or not: the form shows only the ones that
+ * were around on the brew's date (see bagUnavailable), and that date can be
+ * changed in the form.
+ */
+export async function brewFormData(keep: Keep = {}) {
+  const activeOr = (
+    archivedAt: AnyPgColumn,
+    id: AnyPgColumn,
+    keepId?: number | null,
+  ) => (keepId ? or(isNull(archivedAt), eq(id, keepId)) : isNull(archivedAt));
+
+  const [bagRows, recipeOptions, brewerOptions, grinderOptions, history] =
     await Promise.all([
-      listOpenBags(),
-      activeRecipes(),
+      db
+        .select({
+          id: bags.id,
+          coffeeId: coffees.id,
+          coffee: coffees.name,
+          roaster: roasters.name,
+          roastedOn: bags.roastedOn,
+          finishedAt: bags.finishedAt,
+        })
+        .from(bags)
+        .innerJoin(coffees, eq(coffees.id, bags.coffeeId))
+        .innerJoin(roasters, eq(roasters.id, coffees.roasterId))
+        .orderBy(asc(sql`lower(${coffees.name})`), desc(bags.roastedOn)),
+      db
+        .select({
+          id: recipes.id,
+          name: recipes.name,
+          brewerId: recipes.brewerId,
+          brewer: brewers.name,
+          doseG: recipes.doseG,
+          waterMl: recipes.waterMl,
+          tempC: recipes.tempC,
+          grindLevel: recipes.grindLevel,
+          steps: recipes.steps,
+        })
+        .from(recipes)
+        .innerJoin(brewers, eq(brewers.id, recipes.brewerId))
+        .where(activeOr(recipes.archivedAt, recipes.id, keep.recipeId))
+        .orderBy(asc(sql`lower(${recipes.name})`)),
       db
         .select({ id: brewers.id, name: brewers.name })
         .from(brewers)
-        .where(isNull(brewers.archivedAt))
+        .where(activeOr(brewers.archivedAt, brewers.id, keep.brewerId))
         .orderBy(asc(sql`lower(${brewers.name})`)),
       db
         .select({
@@ -36,7 +84,7 @@ export async function brewFormData() {
           unit: grinders.unit,
         })
         .from(grinders)
-        .where(isNull(grinders.archivedAt))
+        .where(activeOr(grinders.archivedAt, grinders.id, keep.grinderId))
         .orderBy(asc(sql`lower(${grinders.name})`)),
       // Newest first. Enough to find "last time" values and fit a trend line.
       db
@@ -55,7 +103,20 @@ export async function brewFormData() {
         .orderBy(desc(brews.brewedAt), desc(brews.id))
         .limit(300),
     ]);
-  return { bagOptions, recipeOptions, brewerOptions, grinderOptions, history };
+  // Finished times become local days (server TZ) so the browser can compare
+  // them with the form's date without timezone maths.
+  const bagOptions = bagRows.map(({ finishedAt, ...b }) => ({
+    ...b,
+    finishedOn: finishedAt ? localToday(finishedAt) : null,
+  }));
+  return {
+    today: localToday(),
+    bagOptions,
+    recipeOptions,
+    brewerOptions,
+    grinderOptions,
+    history,
+  };
 }
 
 /** A past brew's inputs, for "Brew again" and editing. */
@@ -85,6 +146,48 @@ export async function getBrewInputs(id: number) {
   return row ?? null;
 }
 
+// ---------- Brew detail ----------
+
+export async function getBrew(id: number) {
+  const [row] = await db
+    .select({
+      id: brews.id,
+      brewedAt: brews.brewedAt,
+      coffeeId: coffees.id,
+      coffee: coffees.name,
+      roaster: roasters.name,
+      process: coffees.process,
+      bagRoastedOn: bags.roastedOn,
+      recipeId: brews.recipeId,
+      recipe: recipes.name,
+      recipeArchived: sql<boolean>`${recipes.archivedAt} is not null`,
+      snapshot: brews.recipeSnapshot,
+      brewer: brewers.name,
+      doseG: brews.doseG,
+      waterMl: brews.waterMl,
+      tempC: brews.tempC,
+      grinder: grinders.name,
+      grinderKind: grinders.settingKind,
+      grinderStep: grinders.step,
+      grinderUnit: grinders.unit,
+      grindSetting: brews.grindSetting,
+      rating: brews.rating,
+      compassStrength: brews.compassStrength,
+      compassExtraction: brews.compassExtraction,
+      flavourNotes: brews.flavourNotes,
+      notes: brews.notes,
+    })
+    .from(brews)
+    .innerJoin(bags, eq(bags.id, brews.bagId))
+    .innerJoin(coffees, eq(coffees.id, bags.coffeeId))
+    .innerJoin(roasters, eq(roasters.id, coffees.roasterId))
+    .innerJoin(brewers, eq(brewers.id, brews.brewerId))
+    .innerJoin(grinders, eq(grinders.id, brews.grinderId))
+    .leftJoin(recipes, eq(recipes.id, brews.recipeId))
+    .where(eq(brews.id, id));
+  return row ?? null;
+}
+
 // ---------- Saving ----------
 
 export class BrewRuleError extends Error {
@@ -101,6 +204,7 @@ export class BrewRuleError extends Error {
  * in the form) and the brew keeps a snapshot of the recipe as it is now.
  */
 export async function createBrew(values: BrewValues) {
+  await assertBag(values);
   const snapshot = await snapshotFor(values);
   const [row] = await db
     .insert(brews)
@@ -109,9 +213,33 @@ export async function createBrew(values: BrewValues) {
   return row.id;
 }
 
-async function snapshotFor(values: BrewValues) {
+/**
+ * Edit a brew. Its recipe snapshot is kept as long as the recipe is unchanged,
+ * so editing an old brew never rewrites its method; switching recipe takes a
+ * fresh snapshot (and the brewer rule applies again).
+ */
+export async function updateBrew(id: number, values: BrewValues) {
+  const [current] = await db
+    .select({ recipeId: brews.recipeId })
+    .from(brews)
+    .where(eq(brews.id, id));
+  if (!current) throw new BrewRuleError("form", "That brew no longer exists.");
+  await assertBag(values);
+  const set =
+    current.recipeId === values.recipeId
+      ? { ...values }
+      : { ...values, recipeSnapshot: await snapshotFor(values) };
+  await db.update(brews).set(set).where(eq(brews.id, id));
+}
+
+export async function deleteBrew(id: number) {
+  await db.delete(brews).where(eq(brews.id, id));
+}
+
+/** The bag must exist and have been around on the brew's day. */
+async function assertBag(values: Pick<BrewValues, "bagId" | "brewedAt">) {
   const [bag] = await db
-    .select({ id: bags.id })
+    .select({ roastedOn: bags.roastedOn, finishedAt: bags.finishedAt })
     .from(bags)
     .where(eq(bags.id, values.bagId));
   if (!bag)
@@ -119,12 +247,25 @@ async function snapshotFor(values: BrewValues) {
       "bagId",
       "That coffee isn't available any more. Pick another.",
     );
+  const why = bagUnavailable(
+    {
+      roastedOn: bag.roastedOn,
+      finishedOn: bag.finishedAt ? localToday(bag.finishedAt) : null,
+    },
+    localToday(values.brewedAt),
+  );
+  if (why)
+    throw new BrewRuleError("bagId", `That bag was ${why}. Pick another.`);
+}
+
+async function snapshotFor(values: BrewValues) {
   if (values.recipeId == null) return null;
   const [recipe] = await db
     .select({
       brewerId: recipes.brewerId,
       doseG: recipes.doseG,
       waterMl: recipes.waterMl,
+      tempC: recipes.tempC,
       grindLevel: recipes.grindLevel,
       steps: recipes.steps,
     })
@@ -143,6 +284,7 @@ async function snapshotFor(values: BrewValues) {
   return {
     doseG: recipe.doseG,
     waterMl: recipe.waterMl,
+    tempC: recipe.tempC,
     grindLevel: recipe.grindLevel,
     steps: recipe.steps,
   };
@@ -150,7 +292,19 @@ async function snapshotFor(values: BrewValues) {
 
 // ---------- Brew list ----------
 
-export function listBrews(limit = 100) {
+export type BrewFilters = {
+  coffeeId?: number;
+  recipeId?: number | "none";
+  brewerId?: number;
+};
+
+export function listBrews(filters: BrewFilters = {}, limit = 200) {
+  const where: SQL[] = [];
+  if (filters.coffeeId) where.push(eq(bags.coffeeId, filters.coffeeId));
+  if (filters.recipeId === "none") where.push(isNull(brews.recipeId));
+  else if (filters.recipeId) where.push(eq(brews.recipeId, filters.recipeId));
+  if (filters.brewerId) where.push(eq(brews.brewerId, filters.brewerId));
+
   return db
     .select({
       id: brews.id,
@@ -178,6 +332,36 @@ export function listBrews(limit = 100) {
     .innerJoin(brewers, eq(brewers.id, brews.brewerId))
     .innerJoin(grinders, eq(grinders.id, brews.grinderId))
     .leftJoin(recipes, eq(recipes.id, brews.recipeId))
+    .where(where.length ? and(...where) : undefined)
     .orderBy(desc(brews.brewedAt), desc(brews.id))
     .limit(limit);
+}
+
+/** Choices for the list's filter pills: only things that have brews. */
+export async function brewFilterOptions() {
+  const [coffeeRows, recipeRows, brewerRows, total] = await Promise.all([
+    db
+      .selectDistinct({ id: coffees.id, name: coffees.name })
+      .from(brews)
+      .innerJoin(bags, eq(bags.id, brews.bagId))
+      .innerJoin(coffees, eq(coffees.id, bags.coffeeId))
+      .orderBy(coffees.name),
+    db
+      .selectDistinct({ id: recipes.id, name: recipes.name })
+      .from(brews)
+      .innerJoin(recipes, eq(recipes.id, brews.recipeId))
+      .orderBy(recipes.name),
+    db
+      .selectDistinct({ id: brewers.id, name: brewers.name })
+      .from(brews)
+      .innerJoin(brewers, eq(brewers.id, brews.brewerId))
+      .orderBy(brewers.name),
+    db.select({ n: sql<number>`count(*)`.mapWith(Number) }).from(brews),
+  ]);
+  return {
+    coffees: coffeeRows,
+    recipes: recipeRows,
+    brewers: brewerRows,
+    total: total[0].n,
+  };
 }

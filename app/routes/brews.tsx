@@ -1,128 +1,205 @@
-import { Link, Outlet, useOutlet } from "react-router";
+import {
+  Form,
+  Link,
+  Outlet,
+  useLocation,
+  useOutlet,
+  useSubmit,
+} from "react-router";
 
-import { RatingPill } from "~/components/bean";
+import { BrewCard } from "~/components/brew-card";
 import { EmptyState } from "~/components/empty-state";
 import type { RouteHandle } from "~/components/route-handle";
-import { CompassGlyph } from "~/components/taste-compass";
-import { FLAVOUR_LABELS } from "~/lib/brew";
-import { listBrews } from "~/lib/brews.server";
-import { describeCompass } from "~/lib/compass";
-import { formatGrind } from "~/lib/equipment";
+import { whenLabel } from "~/lib/brew";
+import {
+  brewFilterOptions,
+  listBrews,
+  type BrewFilters,
+} from "~/lib/brews.server";
 import type { Route } from "./+types/brews";
 
 export const handle: RouteHandle = { title: "Brews" };
 export const meta: Route.MetaFunction = () => [{ title: "Brews · B{ean}log" }];
 
-export async function loader() {
-  const brews = await listBrews();
-  // Labels like "Today, 7:42" are made on the server (in TZ) so they match after hydration.
-  const now = new Date();
-  const day = (d: Date) => d.toDateString();
-  const yesterday = new Date(now.getTime() - 86400000);
-  const when = (d: Date) => {
-    const time = d.toLocaleTimeString("en-CA", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-    if (day(d) === day(now)) return `Today, ${time}`;
-    if (day(d) === day(yesterday)) return `Yesterday, ${time}`;
-    return `${d.toLocaleDateString("en-CA", { month: "short", day: "numeric", ...(d.getFullYear() !== now.getFullYear() && { year: "numeric" }) })}, ${time}`;
+const positive = (v: string | null) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+};
+
+// Filters live in the URL (/brews?coffee=3&brewer=1), so the coffee page can
+// link straight to a filtered list and Back works as expected.
+export async function loader({ request }: Route.LoaderArgs) {
+  const q = new URL(request.url).searchParams;
+  const filters: BrewFilters = {
+    coffeeId: positive(q.get("coffee")),
+    recipeId: q.get("recipe") === "none" ? "none" : positive(q.get("recipe")),
+    brewerId: positive(q.get("brewer")),
   };
-  return { brews: brews.map((b) => ({ ...b, when: when(b.brewedAt) })) };
+  const [brews, options] = await Promise.all([
+    listBrews(filters),
+    brewFilterOptions(),
+  ]);
+  const now = new Date();
+  return {
+    brews: brews.map((b) => ({ ...b, when: whenLabel(b.brewedAt, now) })),
+    options,
+    filters: {
+      coffee: q.get("coffee") ?? "",
+      recipe: q.get("recipe") ?? "",
+      brewer: q.get("brewer") ?? "",
+    },
+  };
 }
 
 // The list stays rendered under brew entry and brew detail on desktop (they
 // open as drawers); on the phone those pages replace it.
 export default function Brews({ loaderData, params }: Route.ComponentProps) {
   const child = useOutlet();
+  const { search } = useLocation();
   const openId = (params as { brewId?: string }).brewId;
-  const { brews } = loaderData;
+  const { brews, options, filters } = loaderData;
+  const filtered = Boolean(filters.coffee || filters.recipe || filters.brewer);
+
   return (
     <>
       <div className={child ? "hidden lg:block" : undefined}>
-        <div className="mx-auto max-w-5xl py-4 px-safe lg:px-8 lg:py-6">
-          {brews.length === 0 ? (
+        <div className="mx-auto flex max-w-5xl flex-col gap-3 py-4 px-safe lg:px-8 lg:py-6">
+          {options.total > 0 && (
+            <FilterBar
+              filters={filters}
+              options={[
+                {
+                  key: "coffee",
+                  label: "Coffee",
+                  items: options.coffees.map(
+                    (c) => [String(c.id), c.name] as const,
+                  ),
+                },
+                {
+                  key: "recipe",
+                  label: "Recipe",
+                  items: [
+                    ["none", "No recipe"] as const,
+                    ...options.recipes.map(
+                      (r) => [String(r.id), r.name] as const,
+                    ),
+                  ],
+                },
+                {
+                  key: "brewer",
+                  label: "Brewer",
+                  items: options.brewers.map(
+                    (b) => [String(b.id), b.name] as const,
+                  ),
+                },
+              ]}
+              count={brews.length}
+              filtered={filtered}
+            />
+          )}
+          {options.total === 0 ? (
             <EmptyState title="No brews yet">
               Tap Log to record your first one.
             </EmptyState>
+          ) : brews.length === 0 ? (
+            <p className="py-10 text-center text-muted">
+              No brews match these filters.
+            </p>
           ) : (
             <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4">
-              {brews.map((b) => {
-                const compass =
-                  b.compassStrength != null
-                    ? {
-                        strength: b.compassStrength,
-                        extraction: b.compassExtraction!,
-                      }
-                    : null;
-                return (
-                  <Link
-                    key={b.id}
-                    to={`/brews/${b.id}`}
-                    className={`flex flex-col gap-2 rounded-2xl border bg-surface p-3 ${openId === String(b.id) ? "border-accent ring-1 ring-accent" : "border-line"}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold">{b.coffee}</p>
-                        <p className="truncate text-sm text-muted">
-                          {b.roaster}
-                        </p>
-                      </div>
-                      {b.rating != null ? (
-                        <RatingPill value={b.rating} />
-                      ) : (
-                        <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-sm text-muted">
-                          Not rated
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm tabular-nums">
-                      <span>{b.brewer}</span>
-                      <span className="text-muted">
-                        {b.doseG} g → {b.waterMl} ml
-                      </span>
-                      <span className="text-muted">{b.tempC}°C</span>
-                      <span className="text-muted">
-                        {formatGrind(
-                          {
-                            settingKind: b.grinderKind,
-                            step: b.grinderStep,
-                            unit: b.grinderUnit,
-                          },
-                          b.grindSetting,
-                        )}
-                      </span>
-                    </div>
-                    {(compass || b.flavourNotes.length > 0) && (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {compass && (
-                          <span className="mr-1 flex items-center gap-1.5 text-sm">
-                            <CompassGlyph value={compass} className="size-6" />
-                            {describeCompass(compass)}
-                          </span>
-                        )}
-                        {b.flavourNotes.map((f) => (
-                          <span
-                            key={f}
-                            className="rounded-full border border-line px-2 py-0.5 text-[11px] font-medium"
-                          >
-                            {FLAVOUR_LABELS[f]}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between text-xs text-muted">
-                      <span>{b.recipe ?? "No recipe"}</span>
-                      <span>{b.when}</span>
-                    </div>
-                  </Link>
-                );
-              })}
+              {brews.map((b) => (
+                <BrewCard
+                  key={b.id}
+                  brew={b}
+                  to={`/brews/${b.id}${search}`}
+                  selected={openId === String(b.id)}
+                />
+              ))}
             </div>
           )}
         </div>
       </div>
       <Outlet />
     </>
+  );
+}
+
+type FilterKey = "coffee" | "recipe" | "brewer";
+
+function FilterBar({
+  filters,
+  options,
+  count,
+  filtered,
+}: {
+  filters: Record<FilterKey, string>;
+  options: {
+    key: FilterKey;
+    label: string;
+    items: (readonly [string, string])[];
+  }[];
+  count: number;
+  filtered: boolean;
+}) {
+  const submit = useSubmit();
+  return (
+    <Form
+      method="get"
+      className="flex flex-col gap-2"
+      onChange={(e) =>
+        submit(e.currentTarget, { replace: true, preventScrollReset: true })
+      }
+    >
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:px-0">
+        {options.map(({ key, label, items }) => {
+          const value = filters[key];
+          const name = items.find(([id]) => id === value)?.[1];
+          return (
+            <span
+              key={key}
+              className={`relative inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-sm font-medium ${value ? "border-accent bg-accent-soft text-accent" : "border-line bg-surface"}`}
+            >
+              <span className="max-w-40 truncate">
+                {value ? (name ?? label) : label}
+              </span>
+              <svg
+                className="size-3.5 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+              {/* Native picker (the iOS wheel on the phone), invisible over the pill */}
+              <select
+                name={key}
+                defaultValue={value}
+                aria-label={`Filter by ${label.toLowerCase()}`}
+                className="absolute inset-0 cursor-pointer opacity-0"
+              >
+                <option value="">All {label.toLowerCase()}s</option>
+                {items.map(([id, n]) => (
+                  <option key={id} value={id}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </span>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between text-sm text-muted">
+        <span className="tabular-nums">
+          {count} brew{count === 1 ? "" : "s"}
+        </span>
+        {filtered && (
+          <Link to="/brews" replace preventScrollReset className="text-accent">
+            Clear filters
+          </Link>
+        )}
+      </div>
+    </Form>
   );
 }

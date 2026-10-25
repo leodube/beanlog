@@ -1,4 +1,9 @@
-import { BrewInput, toLocalInput, type BrewValues } from "./brew";
+import {
+  bagUnavailable,
+  BrewInput,
+  toLocalInput,
+  type BrewValues,
+} from "./brew";
 import type { BrewFormInitial } from "~/components/brew-form";
 import { brewFormData, getBrewInputs } from "./brews.server";
 import { fieldErrors, formToObject } from "./form";
@@ -37,9 +42,11 @@ export async function initialBrew(
       ? await getBrewInputs(data.history[0].id)
       : null;
 
+  // A new brew is brewed now, so only bags around today count.
+  const onShelf = data.bagOptions.filter((b) => !bagUnavailable(b, data.today));
   const openBag = (bagId: number | undefined, coffee: number | undefined) =>
-    data.bagOptions.find((b) => b.id === bagId)?.id ??
-    data.bagOptions.find((b) => b.coffeeId === coffee)?.id ??
+    onShelf.find((b) => b.id === bagId)?.id ??
+    onShelf.find((b) => b.coffeeId === coffee)?.id ??
     null;
   const has = <T extends { id: number }>(
     xs: T[],
@@ -51,7 +58,7 @@ export async function initialBrew(
     : openBag(source?.bagId, source?.coffeeId);
   return {
     brewedAt: now,
-    bagId: bagId ?? data.bagOptions[0]?.id ?? null,
+    bagId: bagId ?? onShelf[0]?.id ?? null,
     recipeId: has(data.recipeOptions, source?.recipeId),
     brewerId: has(data.brewerOptions, source?.brewerId),
     doseG: source?.doseG ?? 15,

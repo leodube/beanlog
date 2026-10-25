@@ -87,6 +87,22 @@
     font-size: max(16px, 1em);
   }
 
+  /* iOS Safari draws date/time inputs as native widgets with their own
+     minimum width, so width: 100% is ignored and they overflow the column.
+     Dropping the native appearance makes them size like any other input
+     (the picker still opens on tap). Its value is also centred by default. */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 0;
+    min-height: 2.875rem;
+  }
+  ::-webkit-date-and-time-value {
+    text-align: left;
+  }
+
   /* Tailwind v4 dropped the pointer cursor on buttons; restore it app-wide. */
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {

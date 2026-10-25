@@ -113,6 +113,8 @@ export type RecipeStep = z.infer<typeof RecipeStepSchema>;
 export const RecipeSnapshotSchema = z.object({
   doseG: z.number().positive(),
   waterMl: z.int().positive(),
+  /** Added after the first snapshots were written, so older ones lack it. */
+  tempC: z.int().optional(),
   grindLevel: z.enum(GRIND_LEVELS),
   steps: RecipeStepsSchema,
 });

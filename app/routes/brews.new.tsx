@@ -4,6 +4,7 @@ import { BrewFields } from "~/components/brew-form";
 import { primaryButton } from "~/components/fields";
 import { Overlay } from "~/components/overlay";
 import type { RouteHandle } from "~/components/route-handle";
+import { bagUnavailable } from "~/lib/brew";
 import { initialBrew, parseBrewForm } from "~/lib/brew-form.server";
 import { brewFormData, BrewRuleError, createBrew } from "~/lib/brews.server";
 import type { Route } from "./+types/brews.new";
@@ -48,7 +49,7 @@ export default function NewBrew({
   const saving = useNavigation().state === "submitting";
   const { formData, initial } = loaderData;
   const ready =
-    formData.bagOptions.length > 0 &&
+    formData.bagOptions.some((b) => !bagUnavailable(b, formData.today)) &&
     formData.brewerOptions.length > 0 &&
     formData.grinderOptions.length > 0;
   return (

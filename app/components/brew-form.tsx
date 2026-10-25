@@ -8,7 +8,7 @@ import { MethodSteps } from "./method-steps";
 import { Sheet } from "./sheet";
 import { Stepper } from "./stepper";
 import { TasteCompass } from "./taste-compass";
-import { FLAVOUR_LABELS } from "~/lib/brew";
+import { bagUnavailable, FLAVOUR_LABELS } from "~/lib/brew";
 import { formatDate } from "~/lib/coffee";
 import { describeCompass, fitZero, type Compass } from "~/lib/compass";
 import {
@@ -34,6 +34,7 @@ type Bag = {
   coffee: string;
   roaster: string;
   roastedOn: string;
+  finishedOn: string | null;
 };
 type Recipe = {
   id: number;
@@ -63,6 +64,8 @@ type History = {
 };
 
 export type BrewFormData = {
+  /** Local YYYY-MM-DD on the server, so "today" matches what it saved. */
+  today: string;
   bagOptions: Bag[];
   recipeOptions: Recipe[];
   brewerOptions: { id: number; name: string }[];
@@ -107,9 +110,15 @@ export function BrewFields({
   initial: BrewFormInitial;
   errors?: Record<string, string>;
 }) {
-  const [bagId, setBagId] = useState(
-    initial.bagId ?? data.bagOptions[0]?.id ?? null,
-  );
+  // Only bags that were around on the brew's day are offered, and the day
+  // follows the "Brewed at" field. The chosen bag is remembered even while
+  // it's hidden, so moving the date back again restores it.
+  const [brewedAt, setBrewedAt] = useState(initial.brewedAt);
+  const day = /^\d{4}-\d{2}-\d{2}/.test(brewedAt)
+    ? brewedAt.slice(0, 10)
+    : initial.brewedAt.slice(0, 10);
+  const bagsThen = data.bagOptions.filter((b) => !bagUnavailable(b, day));
+  const [bagId, setBagId] = useState(initial.bagId ?? bagsThen[0]?.id ?? null);
   const [recipeId, setRecipeId] = useState(initial.recipeId);
   const [brewerId, setBrewerId] = useState(
     initial.brewerId ?? data.brewerOptions[0]?.id ?? null,
@@ -128,7 +137,10 @@ export function BrewFields({
   const [adding, setAdding] = useState<"brewer" | "grinder" | null>(null);
 
   const recipe = data.recipeOptions.find((r) => r.id === recipeId) ?? null;
-  const bag = data.bagOptions.find((b) => b.id === bagId) ?? null;
+  const bag = bagsThen.find((b) => b.id === bagId) ?? null;
+  const hiddenBag = bag
+    ? null
+    : (data.bagOptions.find((b) => b.id === bagId) ?? null);
   const grinder = data.grinderOptions.find((g) => g.id === grinderId) ?? null;
   const grindStep = grinder
     ? grinder.settingKind === "clicks"
@@ -258,27 +270,48 @@ export function BrewFields({
 
       {/* Coffee */}
       <Field label="Coffee" error={errors.bagId}>
-        {data.bagOptions.length ? (
+        {bagsThen.length ? (
           <select
             name="bagId"
-            value={bagId ?? ""}
+            value={bag?.id ?? ""}
             onChange={(e) => setBagId(Number(e.target.value))}
+            required
             className={`${inputClass} font-medium`}
           >
-            {data.bagOptions.map((b) => (
+            {!bag && (
+              <option value="" disabled>
+                Pick a coffee
+              </option>
+            )}
+            {bagsThen.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.coffee} · {b.roaster} · roasted {formatDate(b.roastedOn)}
+                {b.coffee} · {formatDate(b.roastedOn)}
               </option>
             ))}
           </select>
+        ) : day !== data.today ? (
+          <span className="rounded-xl border border-dashed border-line p-3 text-sm text-muted">
+            No bags were on the shelf on {formatDate(day)}.
+          </span>
         ) : (
-          <p className="rounded-xl border border-dashed border-line p-3 text-sm text-muted">
+          <span className="rounded-xl border border-dashed border-line p-3 text-sm text-muted">
             No coffee on the shelf.{" "}
             <Link to="/coffee/new" className="text-accent underline">
               Add a coffee
             </Link>{" "}
             first.
-          </p>
+          </span>
+        )}
+        {hiddenBag && (
+          <span className="px-1 text-[13px] text-muted">
+            {hiddenBag.coffee} isn't offered: that bag was{" "}
+            {bagUnavailable(hiddenBag, day)}.
+          </span>
+        )}
+        {bag && (
+          <span className="truncate px-1 text-[13px] text-muted">
+            {bag.roaster} · roasted {formatDate(bag.roastedOn)}
+          </span>
         )}
       </Field>
 
@@ -586,7 +619,8 @@ export function BrewFields({
         <input
           type="datetime-local"
           name="brewedAt"
-          defaultValue={initial.brewedAt}
+          value={brewedAt}
+          onChange={(e) => setBrewedAt(e.target.value)}
           required
           className={`${inputClass} min-w-0`}
         />

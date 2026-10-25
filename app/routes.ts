@@ -17,6 +17,7 @@ export default [
       // Overlays: drawers over the list on desktop, full pages on the phone.
       route("new", "routes/brews.new.tsx"),
       route(":brewId", "routes/brews.$brewId.tsx"),
+      route(":brewId/edit", "routes/brews.$brewId.edit.tsx"),
     ]),
     route("coffee", "routes/coffee.tsx", [
       route("new", "routes/coffee.new.tsx"),
