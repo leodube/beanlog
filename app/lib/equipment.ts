@@ -68,6 +68,13 @@ export type GrinderSetting = {
 
 const decimals = (step: number) => (step >= 1 ? 0 : step === 0.25 ? 2 : 1);
 
+/** Just the number: "18", "4.2", "1.50". */
+export function formatGrindValue(g: GrinderSetting, value: number) {
+  return g.settingKind === "clicks"
+    ? String(Math.round(value))
+    : value.toFixed(decimals(g.step));
+}
+
 /** "18 clicks", "4.2", "1.5 turns" */
 export function formatGrind(g: GrinderSetting, value: number) {
   if (g.settingKind === "clicks") return `${Math.round(value)} clicks`;

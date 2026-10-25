@@ -28,7 +28,10 @@ export default [
       route("new", "routes/recipes.new.tsx"),
       route(":recipeId", "routes/recipes.$recipeId.tsx"),
     ]),
-    route("stats", "routes/stats.tsx"),
+    route("stats", "routes/stats.tsx", [
+      index("routes/stats._index.tsx"),
+      route("dialing-in", "routes/stats.dialing-in.tsx"),
+    ]),
     route("settings", "routes/settings.tsx"),
     route("logout", "routes/logout.ts"),
     // JSON endpoint for adding equipment from inside the brew form.

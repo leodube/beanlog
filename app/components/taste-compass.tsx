@@ -1,6 +1,6 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 
-import { Bean } from "./bean";
+import { Bean, RatingPill } from "./bean";
 import {
   adviseCompass,
   COMPASS_STEP,
@@ -241,5 +241,70 @@ export function CompassGlyph({
         strokeWidth="1.5"
       />
     </svg>
+  );
+}
+
+/**
+ * The compass frame with no reading. Used in lists so rows keep one height
+ * and a missing reading is easy to spot.
+ */
+export function EmptyCompass({ className = "size-7" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      className={`${className} shrink-0`}
+      role="img"
+      aria-label="No compass reading"
+    >
+      <rect
+        x="1"
+        y="1"
+        width="38"
+        height="38"
+        rx="9"
+        fill="none"
+        stroke="var(--muted)"
+        strokeOpacity="0.45"
+        strokeDasharray="3 2.5"
+      />
+      <line
+        x1="20"
+        y1="8"
+        x2="20"
+        y2="32"
+        stroke="var(--muted)"
+        strokeOpacity="0.35"
+      />
+      <line
+        x1="8"
+        y1="20"
+        x2="32"
+        y2="20"
+        stroke="var(--muted)"
+        strokeOpacity="0.35"
+      />
+    </svg>
+  );
+}
+
+/** Rating chip over a compass (or its empty frame), centred in one column. */
+export function RatingCompassColumn({
+  rating,
+  compass,
+  notRated,
+}: {
+  rating: number | null;
+  compass: Compass | null;
+  notRated: ReactNode;
+}) {
+  return (
+    <div className="flex w-16 shrink-0 flex-col items-center gap-1.5">
+      {rating != null ? <RatingPill value={rating} /> : notRated}
+      {compass ? (
+        <CompassGlyph value={compass} className="size-16" />
+      ) : (
+        <EmptyCompass className="size-16" />
+      )}
+    </div>
   );
 }
