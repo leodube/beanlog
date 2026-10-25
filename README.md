@@ -1,4 +1,8 @@
-# B{ean}log
+<p align="center">
+  <img src="public/favicon.svg" width="96" height="96" alt="B{ean}log logo: a coffee bean whose crease is a curly brace">
+</p>
+
+<h1 align="center">B{ean}log</h1>
 
 A self-hosted log for pour-over and immersion coffee. Record each brew, keep
 your recipes in one place, and see what's working as you dial in a new bag.
@@ -100,7 +104,6 @@ app/
 drizzle/                 SQL migrations (committed)
 scripts/                 account scripts (user:create, user:password)
 server.js                production server
-deploy/                  Podman Quadlet units for self-hosting
 ```
 
 A few conventions:
@@ -190,9 +193,6 @@ Then create your account inside the running container:
 docker compose exec app node build/cli/user-create.js
 docker compose exec app node build/cli/user-password.js   # later, to reset a password
 ```
-
-For rootless Podman with systemd (Quadlets), there are ready-made units and a
-step-by-step guide in [`deploy/`](deploy/README.md).
 
 ### Behind a reverse proxy
 

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { z } from "zod";
 
+import { LogoMark, Wordmark } from "~/components/logo";
 import { db } from "~/db/client.server";
 import { users } from "~/db/schema.server";
 import { assertSameOrigin, safeRedirect } from "~/lib/auth/middleware.server";
@@ -97,8 +98,14 @@ export default function Login({
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-8 py-10 px-safe">
       <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          B&#123;ean&#125;log
+        <LogoMark className="mb-3 size-14" />
+        <h1
+          className="text-3xl font-semibold tracking-tight"
+          aria-label="B{ean}log"
+        >
+          <span aria-hidden="true">
+            <Wordmark />
+          </span>
         </h1>
         <p className="text-muted">Log in to your brew log.</p>
       </div>

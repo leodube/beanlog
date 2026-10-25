@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 
+import { LogoMark, Wordmark } from "./logo";
+
 import {
   BackIcon,
   BrewsIcon,
@@ -147,9 +149,13 @@ function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-1 border-r border-line bg-surface p-4 lg:flex">
       <Link
         to="/brews"
-        className="mb-4 px-2 text-xl font-semibold tracking-tight"
+        aria-label="B{ean}log"
+        className="mb-4 flex items-center gap-2.5 px-2 text-xl font-semibold tracking-tight"
       >
-        B&#123;ean&#125;log
+        <LogoMark className="size-8" />
+        <span aria-hidden="true">
+          <Wordmark />
+        </span>
       </Link>
       <Link
         to="/brews/new"
