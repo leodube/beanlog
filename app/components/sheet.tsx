@@ -2,24 +2,33 @@ import { useEffect, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 
 /**
- * A modal sheet whose open state lives in the URL (e.g. /settings?new=grinder),
- * so it renders on the server, survives a reload, and the back button closes it.
- * Bottom sheet on the phone, centred dialog on desktop.
+ * A modal sheet. Bottom sheet on the phone, centred dialog on desktop.
+ *
+ * - With `closeTo`, its open state lives in the URL (e.g. /settings?new=grinder),
+ *   so it renders on the server, survives a reload, and Back closes it.
+ * - With `onClose`, it's local UI state (e.g. the recipe picker inside the brew
+ *   form), so opening it never navigates away from a half-filled form.
  */
 export function Sheet({
   title,
   closeTo,
+  onClose,
   children,
 }: {
   title: string;
-  closeTo: string;
+  closeTo?: string;
+  onClose?: () => void;
   children: ReactNode;
 }) {
   const navigate = useNavigate();
+  const close = () =>
+    onClose
+      ? onClose()
+      : closeTo && navigate(closeTo, { preventScrollReset: true });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") navigate(closeTo, { preventScrollReset: true });
+      if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKey);
     // Keep the page behind from scrolling while the sheet is open.
@@ -29,17 +38,29 @@ export function Sheet({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = overflow;
     };
-  }, [closeTo, navigate]);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const closeControl = (
+    className: string,
+    children?: ReactNode,
+    extra: Record<string, unknown> = {},
+  ) =>
+    closeTo ? (
+      <Link to={closeTo} preventScrollReset className={className} {...extra}>
+        {children}
+      </Link>
+    ) : (
+      <button type="button" onClick={close} className={className} {...extra}>
+        {children}
+      </button>
+    );
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end lg:items-center lg:justify-center">
-      <Link
-        to={closeTo}
-        preventScrollReset
-        aria-label="Close"
-        tabIndex={-1}
-        className="absolute inset-0 bg-black/40"
-      />
+      {closeControl("absolute inset-0 bg-black/40", null, {
+        "aria-label": "Close",
+        tabIndex: -1,
+      })}
       <div
         role="dialog"
         aria-modal="true"
@@ -48,13 +69,7 @@ export function Sheet({
       >
         <div className="flex items-center justify-between">
           <h2 className="text-[17px] font-semibold">{title}</h2>
-          <Link
-            to={closeTo}
-            preventScrollReset
-            className="text-[15px] text-accent"
-          >
-            Cancel
-          </Link>
+          {closeControl("text-[15px] text-accent", onClose ? "Done" : "Cancel")}
         </div>
         {children}
       </div>

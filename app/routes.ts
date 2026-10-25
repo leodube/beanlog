@@ -30,5 +30,7 @@ export default [
     route("stats", "routes/stats.tsx"),
     route("settings", "routes/settings.tsx"),
     route("logout", "routes/logout.ts"),
+    // JSON endpoint for adding equipment from inside the brew form.
+    route("equipment", "routes/equipment.ts"),
   ]),
 ] satisfies RouteConfig;
