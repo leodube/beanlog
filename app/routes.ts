@@ -12,7 +12,16 @@ export default [
 
   // Everything else requires a signed-in user (middleware in _app.tsx).
   layout("routes/_app.tsx", [
-    index("routes/home.tsx"),
+    index("routes/index.ts"),
+    route("brews", "routes/brews.tsx", [
+      // Overlays: drawers over the list on desktop, full pages on the phone.
+      route("new", "routes/brews.new.tsx"),
+      route(":brewId", "routes/brews.$brewId.tsx"),
+    ]),
+    route("coffee", "routes/coffee.tsx"),
+    route("recipes", "routes/recipes.tsx"),
+    route("stats", "routes/stats.tsx"),
+    route("settings", "routes/settings.tsx"),
     route("logout", "routes/logout.ts"),
   ]),
 ] satisfies RouteConfig;

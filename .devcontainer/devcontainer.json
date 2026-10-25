@@ -7,15 +7,17 @@
     "--name=beanlog",
     // Shared dev network: reach Postgres as `postgres:5432`.
     "--network=devnet",
-    "--env-file=${localWorkspaceFolder}/.env"
+    "--env-file=${localWorkspaceFolder}/.env",
+    "-p",
+    "5173:5173"
   ],
   "mounts": [
     "source=beanlog-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
   ],
   "postCreateCommand": "sudo chown node node_modules && npm install",
-  "forwardPorts": [5173, 4983],
+  "forwardPorts": [4983],
   "portsAttributes": {
-    "5173": { "label": "BeanLog dev", "onAutoForward": "notify" },
+    "5173": { "label": "BeanLog dev", "onAutoForward": "ignore" },
     "4983": { "label": "Drizzle Studio", "onAutoForward": "silent" }
   },
   "customizations": {

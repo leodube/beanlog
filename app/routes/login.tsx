@@ -100,9 +100,7 @@ export default function Login({
         <h1 className="text-3xl font-semibold tracking-tight">
           B&#123;ean&#125;log
         </h1>
-        <p className="text-stone-600 dark:text-stone-400">
-          Log in to your brew log.
-        </p>
+        <p className="text-muted">Log in to your brew log.</p>
       </div>
 
       <Form method="post" className="flex flex-col gap-4" replace>
@@ -112,15 +110,13 @@ export default function Login({
         {actionData?.error && (
           <p
             role="alert"
-            className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-800 dark:bg-red-950 dark:text-red-200"
+            className="rounded-xl bg-danger/10 p-3 text-sm font-medium text-danger"
           >
             {actionData.error}
           </p>
         )}
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-stone-600 dark:text-stone-400">
-            Username
-          </span>
+          <span className="text-sm font-medium text-muted">Username</span>
           <input
             name="username"
             autoComplete="username"
@@ -128,24 +124,22 @@ export default function Login({
             autoCorrect="off"
             spellCheck={false}
             required
-            className="rounded-xl border border-stone-300 bg-white p-3 outline-none focus:border-amber-700 dark:border-stone-700 dark:bg-stone-900"
+            className="rounded-xl border border-line bg-surface p-3 outline-none focus:border-accent"
           />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-stone-600 dark:text-stone-400">
-            Password
-          </span>
+          <span className="text-sm font-medium text-muted">Password</span>
           <input
             name="password"
             type="password"
             autoComplete="current-password"
             required
-            className="rounded-xl border border-stone-300 bg-white p-3 outline-none focus:border-amber-700 dark:border-stone-700 dark:bg-stone-900"
+            className="rounded-xl border border-line bg-surface p-3 outline-none focus:border-accent"
           />
         </label>
         <button
           disabled={busy}
-          className="mt-2 rounded-2xl bg-amber-800 py-3.5 text-[17px] font-semibold text-white disabled:opacity-60 dark:bg-amber-500 dark:text-stone-950"
+          className="mt-2 rounded-2xl bg-accent py-3.5 text-[17px] font-semibold text-accent-fg disabled:opacity-60"
         >
           {busy ? "Logging in…" : "Log in"}
         </button>

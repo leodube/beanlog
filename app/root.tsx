@@ -27,12 +27,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
         <meta
           name="theme-color"
-          content="#fafaf9"
+          content="#ffffff"
           media="(prefers-color-scheme: light)"
         />
         <meta
           name="theme-color"
-          content="#0c0a09"
+          content="#1c1917"
           media="(prefers-color-scheme: dark)"
         />
         {/* Home-screen app on iOS: full screen, no Safari chrome. */}
