@@ -11,7 +11,11 @@ import { z } from "zod";
 
 import { Sheet } from "~/components/sheet";
 import type { RouteHandle } from "~/components/route-handle";
-import { userContext } from "~/lib/auth/context.server";
+import { changePassword } from "~/lib/auth/account.server";
+import { sessionIdContext, userContext } from "~/lib/auth/context.server";
+import { PASSWORD_MIN_LENGTH } from "~/lib/auth/password.server";
+import { clientIp } from "~/lib/auth/rate-limit.server";
+import { countSessions, endOtherSessions } from "~/lib/auth/session.server";
 import { GRINDER_KINDS, type GrinderKind } from "~/lib/domain";
 import {
   BrewerInput,
@@ -49,12 +53,28 @@ function parseSheet(url: URL) {
     : null;
 }
 
+// Confirmations after an account action, shown once via ?done=.
+const DONE = {
+  password: "Password changed. Your other devices were logged out.",
+  others: "Your other devices were logged out.",
+} as const;
+
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const equipment = await listEquipment();
+  const url = new URL(request.url);
+  const user = context.get(userContext);
+  const [equipment, devices] = await Promise.all([
+    listEquipment(),
+    countSessions(user.id),
+  ]);
+  const done = url.searchParams.get("done");
   return {
     equipment,
-    sheet: parseSheet(new URL(request.url)),
-    username: context.get(userContext).username,
+    sheet: parseSheet(url),
+    passwordSheet: url.searchParams.get("account") === "password",
+    username: user.username,
+    devices,
+    notice: done && done in DONE ? DONE[done as keyof typeof DONE] : null,
+    minLength: PASSWORD_MIN_LENGTH,
   };
 }
 
@@ -62,11 +82,33 @@ type Errors = { name?: string; step?: string };
 const fail = (errors: Errors) => data({ errors }, { status: 400 });
 const Id = z.coerce.number().int().positive();
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const form = Object.fromEntries(await request.formData());
   const id = form.id ? Id.parse(form.id) : null;
 
   switch (form.intent) {
+    case "change-password": {
+      const user = context.get(userContext);
+      const str = (v: FormDataEntryValue | undefined) =>
+        typeof v === "string" ? v : "";
+      const result = await changePassword({
+        userId: user.id,
+        username: user.username,
+        sessionId: context.get(sessionIdContext),
+        ip: clientIp(request),
+        current: str(form.current),
+        next: str(form.next),
+        repeat: str(form.repeat),
+      });
+      if (!result.ok)
+        return data({ passwordErrors: result.errors }, { status: 400 });
+      return redirect("/settings?done=password");
+    }
+    case "logout-others": {
+      const user = context.get(userContext);
+      await endOtherSessions(user.id, context.get(sessionIdContext));
+      return redirect("/settings?done=others");
+    }
     case "save-brewer":
     case "quick-brewer": {
       const parsed = BrewerInput.safeParse(form);
@@ -112,7 +154,7 @@ export async function action({ request }: Route.ActionArgs) {
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { equipment, sheet, username } = loaderData;
+  const { equipment, sheet, username, devices, notice } = loaderData;
   const brewers = equipment.brewers.filter((b) => !b.archivedAt);
   const grinders = equipment.grinders.filter((g) => !g.archivedAt);
   const archived = [
@@ -212,11 +254,51 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </Section>
       )}
 
-      <Section title="Account">
+      <Section
+        title="Account"
+        footnote={
+          devices > 1
+            ? `You're logged in on ${devices} devices, including this one.`
+            : "This is the only device you're logged in on."
+        }
+      >
+        {notice && (
+          <p
+            role="status"
+            className="bg-accent-soft px-3 py-3 text-sm font-medium text-accent first:rounded-t-2xl"
+          >
+            {notice}
+          </p>
+        )}
         <div className="flex items-center justify-between px-3 py-3">
           <span className="text-muted">Signed in as</span>
           <span className="font-medium">{username}</span>
         </div>
+        <Link
+          to="?account=password"
+          preventScrollReset
+          className="flex items-center justify-between px-3 py-3 font-medium"
+        >
+          Change password
+          <svg
+            className="size-4 text-muted"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <path d="m9 5 7 7-7 7" />
+          </svg>
+        </Link>
+        {devices > 1 && (
+          <Form method="post" preventScrollReset>
+            <input type="hidden" name="intent" value="logout-others" />
+            <button className="w-full px-3 py-3 text-left font-medium">
+              Log out other devices
+            </button>
+          </Form>
+        )}
         <Form method="post" action="/logout">
           <button className="w-full px-3 py-3 text-left font-medium text-danger">
             Log out
@@ -224,6 +306,9 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </Form>
       </Section>
 
+      {loaderData.passwordSheet && (
+        <PasswordSheet username={username} minLength={loaderData.minLength} />
+      )}
       {sheet?.type === "brewer" && (sheet.id == null || editing) && (
         <BrewerSheet
           key={sheet.id ?? "new"}
@@ -357,6 +442,73 @@ const inputClass =
   "w-full rounded-2xl border border-line bg-surface-2 p-3 font-semibold outline-none focus:border-accent";
 const primaryButton =
   "w-full rounded-2xl bg-accent py-3.5 text-[17px] font-semibold text-accent-fg disabled:opacity-60";
+
+function PasswordSheet({
+  username,
+  minLength,
+}: {
+  username: string;
+  minLength: number;
+}) {
+  const saving = useSaving();
+  const result = useActionData<typeof action>();
+  const errors =
+    result && "passwordErrors" in result ? result.passwordErrors : undefined;
+  const field = (
+    name: "current" | "next" | "repeat",
+    label: string,
+    autoComplete: string,
+    extra: { autoFocus?: boolean; hint?: string } = {},
+  ) => (
+    <label className="flex flex-col gap-2">
+      <span className="text-[13px] font-medium text-muted">{label}</span>
+      <input
+        type="password"
+        name={name}
+        autoComplete={autoComplete}
+        autoFocus={extra.autoFocus}
+        required
+        minLength={name === "current" ? undefined : minLength}
+        aria-invalid={errors?.[name] ? true : undefined}
+        className={inputClass}
+      />
+      {errors?.[name] ? (
+        <ErrorText>{errors[name]}</ErrorText>
+      ) : (
+        extra.hint && <span className="text-sm text-muted">{extra.hint}</span>
+      )}
+    </label>
+  );
+  return (
+    <Sheet title="Change password" closeTo="/settings">
+      <Form method="post" preventScrollReset className="flex flex-col gap-4">
+        <input type="hidden" name="intent" value="change-password" />
+        {/* Lets password managers file the new password under the right account. */}
+        <input
+          type="text"
+          name="username"
+          value={username}
+          autoComplete="username"
+          readOnly
+          hidden
+        />
+        {field("current", "Current password", "current-password", {
+          autoFocus: true,
+        })}
+        {field("next", "New password", "new-password", {
+          hint: `At least ${minLength} characters.`,
+        })}
+        {field("repeat", "Repeat new password", "new-password")}
+        <p className="text-sm text-muted">
+          Your other devices will be logged out. This one stays signed in.
+        </p>
+        <button disabled={saving} className={primaryButton}>
+          {saving ? "Changing…" : "Change password"}
+        </button>
+      </Form>
+    </Sheet>
+  );
+}
 
 function BrewerSheet({
   brewer,
