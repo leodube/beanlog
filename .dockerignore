@@ -1,7 +1,14 @@
+# Keep the build context small and free of local state and secrets.
+.git
+.github
+.devcontainer
+.agents
 .react-router
+.env
+.env.*
+!.env.example
 build
 node_modules
-README.md
-.env
-.devcontainer
-.git
+deploy
+*.md
+.DS_Store

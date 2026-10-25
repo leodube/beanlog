@@ -1,6 +1,13 @@
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
+import { existsSync } from "node:fs";
 import { defineConfig } from "vite";
+
+// Inside a container, listen on all interfaces: Vite's default (localhost) is
+// unreachable through Docker's port forwarding. On a normal machine, stay on
+// localhost; `npm run dev -- --host` exposes the dev server to your network.
+const inContainer =
+  existsSync("/.dockerenv") || !!process.env.REMOTE_CONTAINERS;
 
 export default defineConfig({
   plugins: [tailwindcss(), reactRouter()],
@@ -8,9 +15,7 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   server: {
-    // Listen on all interfaces inside the container. Vite's default
-    // (localhost) is unreachable through Docker's port forwarding.
-    host: "0.0.0.0",
+    host: inContainer ? "0.0.0.0" : "localhost",
     port: 5173,
     strictPort: true,
   },
