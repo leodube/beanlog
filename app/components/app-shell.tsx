@@ -51,7 +51,7 @@ function Header() {
         <div className="flex min-w-16 items-center lg:hidden">
           {overlay && section && (
             <Link
-              to={section.pathname}
+              to={page?.handle?.backTo?.(page.pathname) ?? section.pathname}
               className="flex items-center gap-0.5 text-[15px] text-accent"
             >
               {page?.handle?.backLabel ? (
