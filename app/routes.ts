@@ -23,7 +23,10 @@ export default [
       route(":coffeeId", "routes/coffee.$coffeeId.tsx"),
       route(":coffeeId/edit", "routes/coffee.$coffeeId.edit.tsx"),
     ]),
-    route("recipes", "routes/recipes.tsx"),
+    route("recipes", "routes/recipes.tsx", [
+      route("new", "routes/recipes.new.tsx"),
+      route(":recipeId", "routes/recipes.$recipeId.tsx"),
+    ]),
     route("stats", "routes/stats.tsx"),
     route("settings", "routes/settings.tsx"),
     route("logout", "routes/logout.ts"),
