@@ -1,4 +1,9 @@
+import { existsSync } from "node:fs";
 import { z } from "zod";
+
+// Load .env when present (Coder workspaces don't get runArgs --env-file).
+// Variables already in the environment win.
+if (existsSync(".env")) process.loadEnvFile(".env");
 
 // Validated once at startup. A missing or malformed variable fails loudly here
 // instead of surfacing later as a confusing database or cookie error.

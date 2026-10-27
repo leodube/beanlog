@@ -1,7 +1,15 @@
 {
   "name": "BeanLog",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:24",
-  "initializeCommand": "test -f .env || cp .env.example .env",
+  "containerUser": "node",
+
+  "containerEnv": {
+    "DATABASE_URL": "postgres://beanlog:beanlog@postgres:5432/beanlog"
+  },
+
+  "mounts": [
+    "source=beanlog-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+  ],
 
   "runArgs": [
     "--name=beanlog",
@@ -11,23 +19,13 @@
     "-p",
     "5173:5173"
   ],
-  "mounts": [
-    "source=beanlog-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
-  ],
-  "postCreateCommand": "sudo chown node node_modules && npm install",
+
   "forwardPorts": [4983],
   "portsAttributes": {
     "5173": { "label": "BeanLog dev", "onAutoForward": "ignore" },
     "4983": { "label": "Drizzle Studio", "onAutoForward": "silent" }
   },
-  "customizations": {
-    "vscode": {
-      "extensions": ["esbenp.prettier-vscode", "bradlc.vscode-tailwindcss"],
-      "settings": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "files.associations": { "*.css": "tailwindcss" }
-      }
-    }
-  }
+
+  "initializeCommand": "test -f .env || cp .env.example .env",
+  "postCreateCommand": "sudo mkdir -p node_modules && sudo chown node node_modules && npm install"
 }
