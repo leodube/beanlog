@@ -28,6 +28,7 @@ import {
   timestamp,
   uniqueIndex,
   char,
+  customType,
 } from "drizzle-orm/pg-core";
 
 import {
@@ -266,6 +267,32 @@ export const users = pgTable("users", {
   /** argon2id */
   passwordHash: text().notNull(),
   ...timestamps,
+});
+
+// ---------- Photos ----------
+/** Raw bytes. postgres-js reads and writes bytea as a Buffer. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+
+/**
+ * A photo of a bag (its front), at most one per bag. Stored in Postgres so
+ * all data lives in one place and one backup. The browser resizes before
+ * uploading, so a photo is a few hundred KB plus a small thumbnail.
+ * Replacing a photo inserts a new row: the id changes, so cached copies of
+ * the old one are never shown.
+ */
+export const photos = pgTable("photos", {
+  id: id(),
+  bagId: integer()
+    .notNull()
+    .unique()
+    .references(() => bags.id, { onDelete: "cascade" }),
+  /** JPEG, about 2560 px on the long side. */
+  image: bytea().notNull(),
+  /** JPEG, about 400 px on the long side, for lists. */
+  thumb: bytea().notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
 export const sessions = pgTable(

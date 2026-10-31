@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { ChipRadios } from "./chips";
+import { PhotoField } from "./photo-field";
 import { Field, inputClass } from "./fields";
 import { TagInput } from "./tag-input";
 import {
@@ -255,12 +256,18 @@ export function BagFields({
   errors = {},
 }: {
   today: string;
-  values?: { roastedOn: string; weightG: number; notes: string | null };
+  values?: {
+    roastedOn: string;
+    weightG: number;
+    notes: string | null;
+    photoId?: number | null;
+  };
   errors?: Record<string, string>;
 }) {
   const [weight, setWeight] = useState(String(values?.weightG ?? 250));
   return (
     <Group title="Bag">
+      <PhotoField current={values?.photoId ?? null} error={errors.photo} />
       <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-3">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Roast date" error={errors.roastedOn}>

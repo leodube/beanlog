@@ -2,6 +2,12 @@ import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "~/db/client.server";
 import { bags, brews, coffees, roasters } from "~/db/schema.server";
+import {
+  applyPhotoChange,
+  bagPhotoId,
+  coffeePhotoId,
+  type PhotoChange,
+} from "./photos.server";
 
 // ---------- Derived values ----------
 // Grams left = bag weight minus the doses of its brews. Computed, never stored.
@@ -55,6 +61,7 @@ export async function listCoffees() {
       brewAvg: coffeeAvg,
       openBags: openBagCount,
       currentBag,
+      photoId: coffeePhotoId(),
     })
     .from(coffees)
     .innerJoin(roasters, eq(roasters.id, coffees.roasterId))
@@ -87,6 +94,7 @@ export async function getCoffee(id: number) {
       rating: coffees.rating,
       brews: coffeeBrews,
       brewAvg: coffeeAvg,
+      photoId: coffeePhotoId(),
     })
     .from(coffees)
     .innerJoin(roasters, eq(roasters.id, coffees.roasterId))
@@ -102,6 +110,7 @@ export async function getCoffee(id: number) {
       finishedAt: bags.finishedAt,
       usedG,
       brews: bagBrews,
+      photoId: bagPhotoId(),
     })
     .from(bags)
     .where(eq(bags.coffeeId, id))
@@ -180,6 +189,7 @@ export function createCoffee(
   roaster: number | RoasterValues,
   coffee: CoffeeValues,
   bag: BagValues,
+  photo: PhotoChange = { kind: "keep" },
 ) {
   return translateDuplicates(() =>
     db.transaction(async (tx) => {
@@ -196,7 +206,11 @@ export function createCoffee(
         .insert(coffees)
         .values({ ...coffee, roasterId })
         .returning({ id: coffees.id });
-      await tx.insert(bags).values({ ...bag, coffeeId: row.id });
+      const [newBag] = await tx
+        .insert(bags)
+        .values({ ...bag, coffeeId: row.id })
+        .returning({ id: bags.id });
+      await applyPhotoChange(newBag.id, photo, tx);
       return row.id;
     }),
   );
@@ -230,19 +244,34 @@ export async function rateCoffee(id: number, rating: number | null) {
   await db.update(coffees).set({ rating }).where(eq(coffees.id, id));
 }
 
-export async function addBag(coffeeId: number, bag: BagValues) {
-  await db.insert(bags).values({ ...bag, coffeeId });
+export async function addBag(
+  coffeeId: number,
+  bag: BagValues,
+  photo: PhotoChange = { kind: "keep" },
+) {
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(bags)
+      .values({ ...bag, coffeeId })
+      .returning({ id: bags.id });
+    await applyPhotoChange(row.id, photo, tx);
+  });
 }
 
 export async function updateBag(
   coffeeId: number,
   bagId: number,
   bag: BagValues,
+  photo: PhotoChange = { kind: "keep" },
 ) {
-  await db
-    .update(bags)
-    .set(bag)
-    .where(and(eq(bags.id, bagId), eq(bags.coffeeId, coffeeId)));
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(bags)
+      .set(bag)
+      .where(and(eq(bags.id, bagId), eq(bags.coffeeId, coffeeId)))
+      .returning({ id: bags.id });
+    if (row) await applyPhotoChange(row.id, photo, tx);
+  });
 }
 
 export async function setBagFinished(

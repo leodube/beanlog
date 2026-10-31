@@ -14,6 +14,7 @@ import {
 } from "~/db/schema.server";
 import { bagUnavailable, type BrewValues } from "./brew";
 import { localToday } from "./coffee";
+import { bagPhotoId, coffeePhotoId } from "./photos.server";
 
 // ---------- Brew form data ----------
 
@@ -158,6 +159,10 @@ export async function getBrew(id: number) {
       roaster: roasters.name,
       process: coffees.process,
       bagRoastedOn: bags.roastedOn,
+      // This bag's photo, else the coffee's most recent one.
+      photoId: sql<
+        number | null
+      >`coalesce(${bagPhotoId()}, ${coffeePhotoId()})`,
       recipeId: brews.recipeId,
       recipe: recipes.name,
       recipeArchived: sql<boolean>`${recipes.archivedAt} is not null`,

@@ -13,7 +13,9 @@ import { z } from "zod";
 import { BeanSlider } from "~/components/bean-slider";
 import { BagFields } from "~/components/coffee-form";
 import { primaryButton } from "~/components/fields";
+import { CameraIcon } from "~/components/icons";
 import { Overlay } from "~/components/overlay";
+import { PhotoHeader } from "~/components/photo-viewer";
 import type { RouteHandle } from "~/components/route-handle";
 import { Sheet } from "~/components/sheet";
 import {
@@ -38,7 +40,9 @@ import { whenLabel } from "~/lib/brew";
 import { listBrews } from "~/lib/brews.server";
 import { RatingPill } from "~/components/bean";
 import { formatGrind } from "~/lib/equipment";
+import { photoUrl } from "~/lib/photo";
 import { fieldErrors, formToObject } from "~/lib/form";
+import { photoChange, readUploadForm } from "~/lib/photos.server";
 import type { Route } from "./+types/coffee.$coffeeId";
 
 export const handle: RouteHandle = { title: "Coffee", overlay: true };
@@ -91,7 +95,7 @@ const BagId = z.coerce.number().int().positive();
 
 export async function action({ request, params }: Route.ActionArgs) {
   const id = idOf(params);
-  const form = await request.formData();
+  const form = await readUploadForm(request);
   const intent = form.get("intent");
 
   if (intent === "rate") {
@@ -111,14 +115,20 @@ export async function action({ request, params }: Route.ActionArgs) {
         { errors: fieldErrors(parsed.error.issues) },
         { status: 400 },
       );
+    const photo = await photoChange(form);
+    if (!photo.ok)
+      return data(
+        { errors: { photo: photo.error } as Record<string, string> },
+        { status: 400 },
+      );
     const bag = {
       roastedOn: parsed.data.roastedOn,
       weightG: parsed.data.weightG,
       notes: parsed.data.bagNotes,
     };
     const bagId = form.get("bagId");
-    if (bagId) await updateBag(id, BagId.parse(bagId), bag);
-    else await addBag(id, bag);
+    if (bagId) await updateBag(id, BagId.parse(bagId), bag, photo.change);
+    else await addBag(id, bag, photo.change);
     return redirect(`/coffee/${id}`);
   }
   if (intent === "finish-bag" || intent === "reopen-bag") {
@@ -165,6 +175,23 @@ export default function CoffeeDetail({ loaderData }: Route.ComponentProps) {
   return (
     <Overlay title="Coffee" closeTo="/coffee">
       <div className="flex flex-col gap-5">
+        {coffee.photoId != null ? (
+          <PhotoHeader
+            id={coffee.photoId}
+            alt={`Photo of the ${coffee.name} bag`}
+          />
+        ) : (
+          coffee.bags[0] && (
+            <Link
+              to={`?bag=${coffee.bags[0].id}`}
+              preventScrollReset
+              className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-line py-6 text-sm font-medium text-accent"
+            >
+              <CameraIcon className="size-5" />
+              Add a photo of the bag
+            </Link>
+          )
+        )}
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <p className="text-xs font-medium tracking-wide text-muted uppercase">
@@ -249,11 +276,20 @@ export default function CoffeeDetail({ loaderData }: Route.ComponentProps) {
                 key={b.id}
                 className={`flex flex-col gap-3 rounded-2xl border border-line bg-surface p-3 ${b.finishedAt ? "opacity-75" : ""}`}
               >
-                <div className="flex items-baseline justify-between gap-3 text-sm tabular-nums">
-                  <span>
-                    Roasted {formatDate(b.roastedOn)}{" "}
-                    <span className="text-muted">
-                      · {plural(b.daysOffRoast, "day")} ago
+                <div className="flex items-center justify-between gap-3 text-sm tabular-nums">
+                  <span className="flex items-center gap-2.5">
+                    {b.photoId != null && (
+                      <img
+                        src={photoUrl(b.photoId, "thumb")}
+                        alt=""
+                        className="size-9 shrink-0 rounded-lg object-cover"
+                      />
+                    )}
+                    <span>
+                      Roasted {formatDate(b.roastedOn)}{" "}
+                      <span className="text-muted">
+                        · {plural(b.daysOffRoast, "day")} ago
+                      </span>
                     </span>
                   </span>
                   <span className="text-muted">{b.weightG} g</span>
@@ -482,6 +518,7 @@ function BagSheet({
     roastedOn: string;
     weightG: number;
     notes: string | null;
+    photoId: number | null;
   };
   today: string;
   canDelete: boolean;
@@ -494,7 +531,12 @@ function BagSheet({
   const saving = useNavigation().state === "submitting";
   return (
     <Sheet title={bag ? "Edit bag" : "New bag"} closeTo={`/coffee/${coffeeId}`}>
-      <Form method="post" preventScrollReset className="flex flex-col gap-4">
+      <Form
+        method="post"
+        encType="multipart/form-data"
+        preventScrollReset
+        className="flex flex-col gap-4"
+      >
         <input type="hidden" name="intent" value="save-bag" />
         {bag && <input type="hidden" name="bagId" value={bag.id} />}
         <BagFields today={today} values={bag} errors={errors} />

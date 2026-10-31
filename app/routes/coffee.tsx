@@ -12,6 +12,7 @@ import { z } from "zod";
 
 import { RatingPill } from "~/components/bean";
 import { EmptyState } from "~/components/empty-state";
+import { BagThumb } from "~/components/photo-viewer";
 import { Field, inputClass, primaryButton } from "~/components/fields";
 import type { RouteHandle } from "~/components/route-handle";
 import { Sheet } from "~/components/sheet";
@@ -246,40 +247,43 @@ function CoffeeCard({
   return (
     <Link
       to={`/coffee/${c.id}`}
-      className={`flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 ${open ? "" : "opacity-75"}`}
+      className={`flex items-start gap-3 rounded-2xl border border-line bg-surface p-3 ${open ? "" : "opacity-75"}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-semibold">{c.name}</p>
-          <p className="truncate text-sm text-muted">{c.roaster}</p>
+      <BagThumb photoId={c.photoId} />
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate font-semibold">{c.name}</p>
+            <p className="truncate text-sm text-muted">{c.roaster}</p>
+          </div>
+          {c.rating != null ? (
+            <RatingPill value={c.rating} />
+          ) : c.brewAvg != null ? (
+            <RatingPill value={c.brewAvg} label=" avg" />
+          ) : (
+            <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-sm text-muted">
+              Not rated
+            </span>
+          )}
         </div>
-        {c.rating != null ? (
-          <RatingPill value={c.rating} />
-        ) : c.brewAvg != null ? (
-          <RatingPill value={c.brewAvg} label=" avg" />
-        ) : (
-          <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-sm text-muted">
-            Not rated
+        <p className="text-sm">
+          {[
+            countryName(c.originCountry) || "Blend",
+            PROCESS_LABELS[c.process],
+            ROAST_LEVEL_LABELS[c.roastLevel],
+          ].join(" · ")}
+        </p>
+        <div className="flex flex-wrap justify-between gap-x-3 text-xs text-muted tabular-nums">
+          <span>
+            {open
+              ? `Roasted ${plural(c.daysOffRoast ?? 0, "day")} ago`
+              : "Finished"}
           </span>
-        )}
-      </div>
-      <p className="text-sm">
-        {[
-          countryName(c.originCountry) || "Blend",
-          PROCESS_LABELS[c.process],
-          ROAST_LEVEL_LABELS[c.roastLevel],
-        ].join(" · ")}
-      </p>
-      <div className="flex flex-wrap justify-between gap-x-3 text-xs text-muted tabular-nums">
-        <span>
-          {open
-            ? `Roasted ${plural(c.daysOffRoast ?? 0, "day")} ago`
-            : "Finished"}
-        </span>
-        <span>
-          {plural(c.brews, "brew")}
-          {open ? ` · ≈${left} g left` : ""}
-        </span>
+          <span>
+            {plural(c.brews, "brew")}
+            {open ? ` · ≈${left} g left` : ""}
+          </span>
+        </div>
       </div>
     </Link>
   );

@@ -34,6 +34,8 @@ export default [
     ]),
     route("settings", "routes/settings.tsx"),
     route("logout", "routes/logout.ts"),
+    // Bag photos (signed-in only): /photos/12/full, /photos/12/thumb.
+    route("photos/:photoId/:size", "routes/photos.ts"),
     // JSON endpoint for adding equipment from inside the brew form.
     route("equipment", "routes/equipment.ts"),
   ]),

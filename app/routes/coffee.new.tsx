@@ -11,6 +11,7 @@ import {
   roasterOptions,
 } from "~/lib/coffee.server";
 import { parseCoffeeForm } from "~/lib/coffee-form.server";
+import { photoChange, readUploadForm } from "~/lib/photos.server";
 import type { Route } from "./+types/coffee.new";
 
 export const handle: RouteHandle = {
@@ -27,10 +28,26 @@ export async function loader() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const parsed = parseCoffeeForm(await request.formData(), { withBag: true });
-  if (!parsed.ok) return data({ errors: parsed.errors }, { status: 400 });
+  const form = await readUploadForm(request);
+  const parsed = parseCoffeeForm(form, { withBag: true });
+  const photo = await photoChange(form);
+  if (!parsed.ok || !photo.ok)
+    return data(
+      {
+        errors: {
+          ...(parsed.ok ? {} : parsed.errors),
+          ...(photo.ok ? {} : { photo: photo.error }),
+        } as Record<string, string>,
+      },
+      { status: 400 },
+    );
   try {
-    const id = await createCoffee(parsed.roaster, parsed.coffee, parsed.bag!);
+    const id = await createCoffee(
+      parsed.roaster,
+      parsed.coffee,
+      parsed.bag!,
+      photo.change,
+    );
     return redirect(`/coffee/${id}`);
   } catch (e) {
     if (e instanceof DuplicateError)
@@ -57,7 +74,7 @@ export default function NewCoffee({
 }: Route.ComponentProps) {
   const saving = useNavigation().state === "submitting";
   return (
-    <Form method="post" className="contents">
+    <Form method="post" encType="multipart/form-data" className="contents">
       <Overlay
         title="New coffee"
         closeTo="/coffee"

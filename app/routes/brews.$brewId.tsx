@@ -5,6 +5,7 @@ import { RatingPill } from "~/components/bean";
 import { primaryButton } from "~/components/fields";
 import { MethodSteps } from "~/components/method-steps";
 import { Overlay } from "~/components/overlay";
+import { BagThumb } from "~/components/photo-viewer";
 import type { RouteHandle } from "~/components/route-handle";
 import { CompassGlyph } from "~/components/taste-compass";
 import { FLAVOUR_LABELS, whenLabel } from "~/lib/brew";
@@ -94,19 +95,30 @@ export default function BrewDetail({ loaderData }: Route.ComponentProps) {
   return (
     <Overlay title="Brew" closeTo={`/brews${search}`}>
       <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-medium tracking-wide text-muted uppercase">
-            {brew.when}
-          </p>
-          <Link
-            to={`/coffee/${brew.coffeeId}`}
-            className="text-2xl font-semibold tracking-tight text-balance hover:underline"
-          >
-            {brew.coffee}
-          </Link>
-          <p className="text-muted">
-            {brew.roaster} · {PROCESS_LABELS[brew.process]}
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="text-xs font-medium tracking-wide text-muted uppercase">
+              {brew.when}
+            </p>
+            <Link
+              to={`/coffee/${brew.coffeeId}`}
+              className="text-2xl font-semibold tracking-tight text-balance hover:underline"
+            >
+              {brew.coffee}
+            </Link>
+            <p className="text-muted">
+              {brew.roaster} · {PROCESS_LABELS[brew.process]}
+            </p>
+          </div>
+          {brew.photoId != null && (
+            <Link
+              to={`/coffee/${brew.coffeeId}`}
+              aria-label={`Open ${brew.coffee}`}
+              className="shrink-0"
+            >
+              <BagThumb photoId={brew.photoId} className="size-20" />
+            </Link>
+          )}
         </div>
 
         <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-3">
