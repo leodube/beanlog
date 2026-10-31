@@ -28,7 +28,12 @@ import {
   listRoasters,
   saveRoaster,
 } from "~/lib/coffee.server";
-import { ALL_CODES, countryName, countryOptions } from "~/lib/countries";
+import {
+  ALL_CODES,
+  countryName,
+  countryOptions,
+  originLabel,
+} from "~/lib/countries";
 import { fieldErrors, formToObject } from "~/lib/form";
 import type { Route } from "./+types/coffee";
 
@@ -268,7 +273,7 @@ function CoffeeCard({
         </div>
         <p className="text-sm">
           {[
-            countryName(c.originCountry) || "Blend",
+            originLabel(c.origins),
             PROCESS_LABELS[c.process],
             ROAST_LEVEL_LABELS[c.roastLevel],
           ].join(" · ")}

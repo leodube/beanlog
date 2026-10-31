@@ -45,7 +45,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   const parsed = parseCoffeeForm(await request.formData(), { withBag: false });
   if (!parsed.ok) return data({ errors: parsed.errors }, { status: 400 });
   try {
-    await updateCoffee(id, parsed.roaster, parsed.coffee);
+    await updateCoffee(id, parsed.roaster, parsed.coffee, parsed.origins);
   } catch (e) {
     if (e instanceof DuplicateError)
       return data(

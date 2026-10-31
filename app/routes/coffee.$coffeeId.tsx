@@ -35,7 +35,7 @@ import {
   setBagFinished,
   updateBag,
 } from "~/lib/coffee.server";
-import { countryName } from "~/lib/countries";
+import { countryName, originLabel } from "~/lib/countries";
 import { whenLabel } from "~/lib/brew";
 import { listBrews } from "~/lib/brews.server";
 import { RatingPill } from "~/components/bean";
@@ -208,7 +208,13 @@ export default function CoffeeDetail({ loaderData }: Route.ComponentProps) {
             {coffee.name}
           </h2>
           <p className="text-muted">
-            {[countryName(coffee.originCountry) || "Blend", coffee.region]
+            {[
+              originLabel(coffee.origins),
+              coffee.origins
+                .map((o) => o.region)
+                .filter(Boolean)
+                .join(" & "),
+            ]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -341,19 +347,41 @@ export default function CoffeeDetail({ loaderData }: Route.ComponentProps) {
           })}
         </div>
 
-        <Section title="Origin">
-          <div className="flex flex-col divide-y divide-line">
-            {row(
-              "Country",
-              countryName(coffee.originCountry) || "Blend / other",
-            )}
-            {row("Region", coffee.region)}
-            {row("Producer", coffee.producer)}
-            {row("Variety", coffee.variety)}
-            {row("Process", PROCESS_LABELS[coffee.process])}
-            {row("Roast level", ROAST_LEVEL_LABELS[coffee.roastLevel])}
-          </div>
-        </Section>
+        {coffee.origins.length > 1 ? (
+          <>
+            {coffee.origins.map((o, i) => (
+              <Section
+                key={i}
+                title={i === 0 ? "Main origin" : "Secondary origin"}
+              >
+                <div className="flex flex-col divide-y divide-line">
+                  {row("Country", countryName(o.country))}
+                  {row("Region", o.region)}
+                  {row("Producer", o.producer)}
+                  {row("Variety", o.variety)}
+                </div>
+              </Section>
+            ))}
+            <div className="flex flex-col divide-y divide-line rounded-2xl border border-line bg-surface">
+              {row("Process", PROCESS_LABELS[coffee.process])}
+              {row("Roast level", ROAST_LEVEL_LABELS[coffee.roastLevel])}
+            </div>
+          </>
+        ) : (
+          <Section title="Origin">
+            <div className="flex flex-col divide-y divide-line">
+              {row(
+                "Country",
+                countryName(coffee.origins[0]?.country) || "Blend / other",
+              )}
+              {row("Region", coffee.origins[0]?.region)}
+              {row("Producer", coffee.origins[0]?.producer)}
+              {row("Variety", coffee.origins[0]?.variety)}
+              {row("Process", PROCESS_LABELS[coffee.process])}
+              {row("Roast level", ROAST_LEVEL_LABELS[coffee.roastLevel])}
+            </div>
+          </Section>
+        )}
 
         {best && (
           <div className="flex flex-col gap-2">

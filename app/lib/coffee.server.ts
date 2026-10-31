@@ -1,7 +1,14 @@
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "~/db/client.server";
-import { bags, brews, coffees, roasters } from "~/db/schema.server";
+import {
+  bags,
+  brews,
+  coffeeOrigins,
+  coffees,
+  roasters,
+} from "~/db/schema.server";
+import type { OriginValues } from "./coffee";
 import {
   applyPhotoChange,
   bagPhotoId,
@@ -46,6 +53,26 @@ const currentBag = sql<{
   from ${bags} b where b.coffee_id = ${coffees.id} and b.finished_at is null
   order by b.roasted_on desc limit 1)`;
 
+// A coffee's origins in order, as JSON. "coffees".id is written out because
+// Drizzle leaves columns unqualified in single-table selects (see photos).
+const originsJson = sql<OriginValues[]>`(
+  select coalesce(json_agg(json_build_object(
+    'country', o.country, 'region', o.region,
+    'producer', o.producer, 'variety', o.variety) order by o.position), '[]')
+  from ${coffeeOrigins} o where o.coffee_id = ${coffees}.id)`;
+
+/** Replace a coffee's origins with these, in order. */
+async function saveOrigins(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  coffeeId: number,
+  origins: OriginValues[],
+) {
+  await tx.delete(coffeeOrigins).where(eq(coffeeOrigins.coffeeId, coffeeId));
+  await tx
+    .insert(coffeeOrigins)
+    .values(origins.map((o, i) => ({ ...o, coffeeId, position: i + 1 })));
+}
+
 // ---------- Coffee list ----------
 export async function listCoffees() {
   const rows = await db
@@ -53,7 +80,7 @@ export async function listCoffees() {
       id: coffees.id,
       name: coffees.name,
       roaster: roasters.name,
-      originCountry: coffees.originCountry,
+      origins: originsJson,
       process: coffees.process,
       roastLevel: coffees.roastLevel,
       rating: coffees.rating,
@@ -83,10 +110,7 @@ export async function getCoffee(id: number) {
       roasterId: coffees.roasterId,
       roaster: roasters.name,
       roasterCity: roasters.city,
-      originCountry: coffees.originCountry,
-      region: coffees.region,
-      producer: coffees.producer,
-      variety: coffees.variety,
+      origins: originsJson,
       process: coffees.process,
       roastLevel: coffees.roastLevel,
       tastingNotes: coffees.tastingNotes,
@@ -144,10 +168,6 @@ type RoasterValues = {
 };
 type CoffeeValues = {
   name: string;
-  originCountry: string | null;
-  region: string | null;
-  producer: string | null;
-  variety: string | null;
   process: (typeof coffees.$inferInsert)["process"];
   roastLevel: (typeof coffees.$inferInsert)["roastLevel"];
   tastingNotes: string[];
@@ -188,6 +208,7 @@ async function translateDuplicates<T>(fn: () => Promise<T>) {
 export function createCoffee(
   roaster: number | RoasterValues,
   coffee: CoffeeValues,
+  origins: OriginValues[],
   bag: BagValues,
   photo: PhotoChange = { kind: "keep" },
 ) {
@@ -206,6 +227,7 @@ export function createCoffee(
         .insert(coffees)
         .values({ ...coffee, roasterId })
         .returning({ id: coffees.id });
+      await saveOrigins(tx, row.id, origins);
       const [newBag] = await tx
         .insert(bags)
         .values({ ...bag, coffeeId: row.id })
@@ -220,6 +242,7 @@ export function updateCoffee(
   id: number,
   roaster: number | RoasterValues,
   coffee: CoffeeValues,
+  origins: OriginValues[],
 ) {
   return translateDuplicates(() =>
     db.transaction(async (tx) => {
@@ -236,6 +259,7 @@ export function updateCoffee(
         .update(coffees)
         .set({ ...coffee, roasterId })
         .where(eq(coffees.id, id));
+      await saveOrigins(tx, id, origins);
     }),
   );
 }

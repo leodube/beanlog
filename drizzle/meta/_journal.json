@@ -15,6 +15,20 @@
       "when": 1793465187917,
       "tag": "0001_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793470142172,
+      "tag": "0002_coffee_origins",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793470149317,
+      "tag": "0003_drop_coffee_origin_columns",
+      "breakpoints": true
     }
   ]
 }

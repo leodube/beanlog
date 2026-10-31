@@ -45,7 +45,9 @@ export async function overviewStats(
       coffeeId: coffees.id,
       coffee: coffees.name,
       coffeeRating: coffees.rating,
-      origin: coffees.originCountry,
+      origins: sql<
+        string[] | null
+      >`(select array_agg(o.country) from coffee_origins o where o.coffee_id = ${coffees}.id and o.country is not null)`,
       roaster: roasters.name,
       recipeId: brews.recipeId,
       recipe: recipes.name,
@@ -93,7 +95,7 @@ export async function overviewStats(
     avgRating: mean(rated.map((b) => b.rating!)),
     rated: rated.length,
     coffees: new Set(list.map((b) => b.coffeeId)).size,
-    origins: new Set(list.map((b) => b.origin).filter(Boolean)).size,
+    origins: new Set(list.flatMap((b) => b.origins ?? [])).size,
   };
 
   // Brews per week, Monday to Sunday, including empty weeks.

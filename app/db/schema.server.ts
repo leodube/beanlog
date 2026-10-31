@@ -87,11 +87,7 @@ export const coffees = pgTable(
       .notNull()
       .references(() => roasters.id, { onDelete: "restrict" }),
     name: text().notNull(),
-    /** ISO 3166-1 alpha-2, e.g. "ET". Null for blends. */
-    originCountry: char({ length: 2 }),
-    region: text(),
-    producer: text(),
-    variety: text(),
+    // Origin details (country, region, producer, variety) are in coffee_origins.
     process: processEnum().notNull(),
     roastLevel: roastLevelEnum().notNull(),
     /** The roaster's tasting notes from the bag. */
@@ -269,6 +265,37 @@ export const users = pgTable("users", {
   ...timestamps,
 });
 
+// ---------- Origins ----------
+/**
+ * Where a coffee comes from: one row per origin, in order (position 1 is the
+ * main origin). A single-origin coffee has one row; a blend of known origins
+ * has several. The app allows two for now (MAX_ORIGINS); the table allows more.
+ */
+export const coffeeOrigins = pgTable(
+  "coffee_origins",
+  {
+    id: id(),
+    coffeeId: integer()
+      .notNull()
+      .references(() => coffees.id, { onDelete: "cascade" }),
+    /** 1 = main origin, 2 = secondary, … */
+    position: smallint().notNull(),
+    /** ISO 3166-1 alpha-2, e.g. "ET". Null only for an unspecified blend (position 1). */
+    country: char({ length: 2 }),
+    region: text(),
+    producer: text(),
+    variety: text(),
+  },
+  (t) => [
+    uniqueIndex("coffee_origins_position_unique").on(t.coffeeId, t.position),
+    check("coffee_origins_position_positive", sql`${t.position} >= 1`),
+    check(
+      "coffee_origins_country_known",
+      sql`${t.country} is not null or ${t.position} = 1`,
+    ),
+  ],
+);
+
 // ---------- Photos ----------
 /** Raw bytes. postgres-js reads and writes bytea as a Buffer. */
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
@@ -322,6 +349,13 @@ export const coffeesRelations = relations(coffees, ({ one, many }) => ({
     references: [roasters.id],
   }),
   bags: many(bags),
+  origins: many(coffeeOrigins),
+}));
+export const coffeeOriginsRelations = relations(coffeeOrigins, ({ one }) => ({
+  coffee: one(coffees, {
+    fields: [coffeeOrigins.coffeeId],
+    references: [coffees.id],
+  }),
 }));
 export const bagsRelations = relations(bags, ({ one, many }) => ({
   coffee: one(coffees, { fields: [bags.coffeeId], references: [coffees.id] }),

@@ -1,6 +1,12 @@
 import type { z } from "zod";
 
-import { BagInput, CoffeeInput, RoasterInput } from "./coffee";
+import {
+  BagInput,
+  CoffeeInput,
+  parseOrigins,
+  RoasterInput,
+  type OriginValues,
+} from "./coffee";
 import { fieldErrors, formToObject } from "./form";
 
 type Parsed =
@@ -11,6 +17,7 @@ type Parsed =
         | number
         | { name: string; city: string | null; countryCode: string | null };
       coffee: Omit<z.output<typeof CoffeeInput>, "roasterId">;
+      origins: OriginValues[];
       bag: { roastedOn: string; weightG: number; notes: string | null } | null;
     };
 
@@ -23,13 +30,20 @@ export function parseCoffeeForm(
   const coffee = CoffeeInput.safeParse(raw);
   const roaster = raw.roasterId === "new" ? RoasterInput.safeParse(raw) : null;
   const bag = withBag ? BagInput.safeParse(raw) : null;
+  const origins = parseOrigins(raw);
 
   const errors = {
     ...(coffee.success ? {} : fieldErrors(coffee.error.issues)),
+    ...(origins.ok ? {} : origins.errors),
     ...(roaster && !roaster.success ? fieldErrors(roaster.error.issues) : {}),
     ...(bag && !bag.success ? fieldErrors(bag.error.issues) : {}),
   };
-  if (!coffee.success || (roaster && !roaster.success) || (bag && !bag.success))
+  if (
+    !coffee.success ||
+    !origins.ok ||
+    (roaster && !roaster.success) ||
+    (bag && !bag.success)
+  )
     return { ok: false, errors };
 
   const { roasterId, ...values } = coffee.data;
@@ -37,6 +51,7 @@ export function parseCoffeeForm(
     ok: true,
     roaster: roaster?.success ? roaster.data : (roasterId as number),
     coffee: values,
+    origins: origins.origins,
     bag: bag?.success
       ? {
           roastedOn: bag.data.roastedOn,

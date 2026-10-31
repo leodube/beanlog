@@ -45,6 +45,7 @@ export async function action({ request }: Route.ActionArgs) {
     const id = await createCoffee(
       parsed.roaster,
       parsed.coffee,
+      parsed.origins,
       parsed.bag!,
       photo.change,
     );

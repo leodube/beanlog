@@ -69,17 +69,6 @@ export const CoffeeInput = z.object({
   roasterId: z.union([z.literal("new"), z.coerce.number().int().positive()], {
     error: "Pick a roaster.",
   }),
-  originCountry: z
-    .string()
-    .optional()
-    .refine(
-      (c) => !c || (ORIGIN_CODES as readonly string[]).includes(c),
-      "Pick an origin.",
-    )
-    .transform((c) => c || null),
-  region: text(120),
-  producer: text(120),
-  variety: text(120),
   process: z.enum(PROCESSES, { error: "Pick a process." }),
   roastLevel: z.enum(ROAST_LEVELS, { error: "Pick a roast level." }),
   tastingNotes: z
@@ -94,6 +83,76 @@ export const CoffeeInput = z.object({
     ),
   notes: text(2000),
 });
+
+// ---------- Origins ----------
+/** How many origins a coffee can have. The table allows more; the form doesn't yet. */
+export const MAX_ORIGINS = 2;
+
+export type OriginValues = {
+  country: string | null;
+  region: string | null;
+  producer: string | null;
+  variety: string | null;
+};
+
+const country = z
+  .string()
+  .optional()
+  .refine(
+    (c) => !c || (ORIGIN_CODES as readonly string[]).includes(c),
+    "Pick a country from the list.",
+  )
+  .transform((c) => c || null);
+
+/** One origin card's fields: origin1Country, origin1Region, … */
+const originFields = (n: number) =>
+  z
+    .object({
+      [`origin${n}Country`]: country,
+      [`origin${n}Region`]: text(120),
+      [`origin${n}Producer`]: text(120),
+      [`origin${n}Variety`]: text(120),
+    })
+    .transform((o): OriginValues => ({
+      country: o[`origin${n}Country`] as string | null,
+      region: o[`origin${n}Region`] as string | null,
+      producer: o[`origin${n}Producer`] as string | null,
+      variety: o[`origin${n}Variety`] as string | null,
+    }));
+
+/**
+ * The form's origin cards, main first. `originCount` says how many cards were
+ * shown. Only the main origin may be left as "Blend / other", and only when
+ * it's the only one.
+ */
+export function parseOrigins(
+  raw: Record<string, unknown>,
+):
+  | { ok: true; origins: OriginValues[] }
+  | { ok: false; errors: Record<string, string> } {
+  const count = Math.min(
+    MAX_ORIGINS,
+    Math.max(1, Number(raw.originCount) || 1),
+  );
+  const origins: OriginValues[] = [];
+  const errors: Record<string, string> = {};
+  for (let n = 1; n <= count; n++) {
+    const parsed = originFields(n).safeParse(raw);
+    if (!parsed.success) {
+      for (const i of parsed.error.issues)
+        errors[String(i.path[0])] ??= i.message;
+      continue;
+    }
+    if (n > 1 && !parsed.data.country)
+      errors[`origin${n}Country`] = "Pick a country, or remove this origin.";
+    origins.push(parsed.data);
+  }
+  if (count > 1 && origins[0] && !origins[0].country)
+    errors.origin1Country = "Pick the main origin's country.";
+  return Object.keys(errors).length
+    ? { ok: false, errors }
+    : { ok: true, origins };
+}
 
 export const RatingInput = z.object({
   rating: z.union([

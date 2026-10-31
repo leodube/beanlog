@@ -69,3 +69,18 @@ export function countryOptions(codes: readonly string[]) {
     .map((c) => [c, countryName(c)] as const)
     .sort((a, b) => a[1].localeCompare(b[1]));
 }
+
+/**
+ * Origins in a few words: "Ethiopia", "Brazil & Ethiopia". An unspecified
+ * origin gives `blend` ("Blend" on cards, "Blend / other" in details).
+ */
+export function originLabel(
+  origins: readonly { country: string | null }[],
+  blend = "Blend",
+) {
+  const names = origins.map((o) => countryName(o.country)).filter(Boolean);
+  if (!names.length) return blend;
+  return names.length === 1
+    ? names[0]
+    : `${names.slice(0, -1).join(", ")} & ${names.at(-1)}`;
+}

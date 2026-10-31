@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { ChipRadios } from "./chips";
 import { PhotoField } from "./photo-field";
 import { Field, inputClass } from "./fields";
 import { TagInput } from "./tag-input";
+import { PlusIcon } from "./icons";
 import {
   COMMON_BAG_SIZES,
+  MAX_ORIGINS,
+  type OriginValues,
   PROCESS_LABELS,
   ROAST_LEVEL_LABELS,
 } from "~/lib/coffee";
@@ -20,10 +23,7 @@ import {
 export type CoffeeFormValues = {
   name: string;
   roasterId: number | null;
-  originCountry: string | null;
-  region: string | null;
-  producer: string | null;
-  variety: string | null;
+  origins: OriginValues[];
   process: Process;
   roastLevel: RoastLevel;
   tastingNotes: string[];
@@ -36,6 +36,132 @@ const processOptions = PROCESSES.map((p) => [p, PROCESS_LABELS[p]] as const);
 const levelOptions = ROAST_LEVELS.map(
   (l) => [l, ROAST_LEVEL_LABELS[l]] as const,
 );
+
+const ORIGIN_TITLES = ["Origin", "Secondary origin"];
+
+/**
+ * One card per origin. The first is the main origin; "Add a secondary origin"
+ * adds another card with the same fields, up to MAX_ORIGINS. Fields are
+ * numbered (origin1Country, origin2Region, …) and `originCount` tells the
+ * server how many cards there are.
+ */
+function OriginCards({
+  initial,
+  errors,
+}: {
+  initial?: OriginValues[];
+  errors: Record<string, string>;
+}) {
+  const nextKey = useRef(0);
+  const card = (o: Partial<OriginValues>) => ({
+    key: nextKey.current++,
+    initial: o,
+    country: o.country ?? "",
+  });
+  const [cards, setCards] = useState(() =>
+    (initial?.length ? initial : [{ country: "ET" }]).map(card),
+  );
+  const mixed = cards.length > 1;
+  const setCountry = (key: number, country: string) =>
+    setCards((cs) => cs.map((c) => (c.key === key ? { ...c, country } : c)));
+
+  return (
+    <>
+      <input type="hidden" name="originCount" value={cards.length} />
+      {cards.map((c, i) => {
+        const n = i + 1;
+        const title =
+          i === 0
+            ? mixed
+              ? "Main origin"
+              : "Origin"
+            : (ORIGIN_TITLES[i] ?? `Origin ${n}`);
+        return (
+          <div key={c.key} className="flex flex-col gap-2">
+            <div className="flex items-baseline justify-between">
+              <span className="text-[13px] font-medium text-muted">
+                {title}
+              </span>
+              {i > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCards((cs) => cs.filter((x) => x.key !== c.key))
+                  }
+                  className="text-sm font-medium text-accent"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-3">
+              <Field label="Country" error={errors[`origin${n}Country`]}>
+                <select
+                  name={`origin${n}Country`}
+                  value={c.country}
+                  onChange={(e) => setCountry(c.key, e.target.value)}
+                  required={i > 0}
+                  className={inputClass}
+                >
+                  {i > 0 && (
+                    <option value="" disabled>
+                      Pick a country
+                    </option>
+                  )}
+                  {originOptions.map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name}
+                    </option>
+                  ))}
+                  {i === 0 && !mixed && <option value="">Blend / other</option>}
+                </select>
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Region" optional>
+                  <input
+                    name={`origin${n}Region`}
+                    defaultValue={c.initial.region ?? ""}
+                    placeholder={i === 0 ? "e.g. Guji" : "e.g. Sidama"}
+                    autoComplete="off"
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Producer" optional>
+                  <input
+                    name={`origin${n}Producer`}
+                    defaultValue={c.initial.producer ?? ""}
+                    placeholder="Farm or co-op"
+                    autoComplete="off"
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
+              <Field label="Variety" optional>
+                <input
+                  name={`origin${n}Variety`}
+                  defaultValue={c.initial.variety ?? ""}
+                  placeholder={i === 0 ? "e.g. Pink Bourbon" : "e.g. Heirloom"}
+                  autoComplete="off"
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </div>
+        );
+      })}
+      {cards.length < MAX_ORIGINS && cards[0].country !== "" && (
+        <button
+          type="button"
+          onClick={() => setCards((cs) => [...cs, card({})])}
+          className="-mt-2 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-line py-3 text-sm font-medium text-accent"
+        >
+          <PlusIcon className="size-4" />
+          Add a secondary origin
+        </button>
+      )}
+    </>
+  );
+}
 
 function Group({
   title,
@@ -148,53 +274,7 @@ export function CoffeeFields({
         )}
       </Group>
 
-      <Group title="Origin">
-        <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-3">
-          <Field label="Country" error={errors.originCountry}>
-            <select
-              name="originCountry"
-              defaultValue={values?.originCountry ?? "ET"}
-              className={inputClass}
-            >
-              {originOptions.map(([c, n]) => (
-                <option key={c} value={c}>
-                  {n}
-                </option>
-              ))}
-              <option value="">Blend / other</option>
-            </select>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Region" optional>
-              <input
-                name="region"
-                defaultValue={values?.region ?? ""}
-                placeholder="e.g. Guji"
-                autoComplete="off"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Producer" optional>
-              <input
-                name="producer"
-                defaultValue={values?.producer ?? ""}
-                placeholder="Farm or co-op"
-                autoComplete="off"
-                className={inputClass}
-              />
-            </Field>
-          </div>
-          <Field label="Variety" optional>
-            <input
-              name="variety"
-              defaultValue={values?.variety ?? ""}
-              placeholder="e.g. Pink Bourbon"
-              autoComplete="off"
-              className={inputClass}
-            />
-          </Field>
-        </div>
-      </Group>
+      <OriginCards initial={values?.origins} errors={errors} />
 
       <Group title="Process">
         <ChipRadios
